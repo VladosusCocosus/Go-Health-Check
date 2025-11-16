@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Health Checks Configuration</title>
+  <style>
+    :root {
+      font-family: "SF Mono", "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+      color: #e4ecff;
+      background: #05070f;
+      line-height: 1.4;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 2.5rem;
+      background: radial-gradient(circle at top, rgba(33, 150, 243, 0.08), transparent 55%),
+        radial-gradient(circle at 20% 20%, rgba(0, 255, 204, 0.05), transparent 45%),
+        #05070f;
+      color: #dbeafe;
+    }
+    .container {
+      max-width: 1120px;
+      margin: 0 auto;
+      background: rgba(8, 15, 33, 0.9);
+      padding: 2.4rem;
+      border-radius: 16px;
+      border: 1px solid rgba(96, 165, 250, 0.2);
+      box-shadow: 0 40px 80px rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(12px);
+    }
+    h1, h2 {
+      color: #f1f5f9;
+      margin-top: 0;
+      letter-spacing: 0.02em;
+    }
+    h1 {
+      font-size: 2rem;
+    }
+    h2 {
+      margin-bottom: 0.5rem;
+      font-size: 1.2rem;
+      text-transform: uppercase;
+      color: #7dd3fc;
+    }
+    code {
+      background: rgba(15, 23, 42, 0.6);
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      color: #fcd34d;
+      font-size: 0.9rem;
+    }
+    fieldset {
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      border-radius: 14px;
+      padding: 1.8rem;
+      margin-bottom: 1.5rem;
+      background: rgba(15, 23, 42, 0.8);
+      box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.08);
+    }
+    legend {
+      padding: 0 0.6rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #7dd3fc;
+    }
+    label {
+      display: flex;
+      flex-direction: column;
+      font-size: 0.95rem;
+      margin-bottom: 1rem;
+      color: #cbd5f5;
+    }
+    input,
+    select {
+      margin-top: 0.4rem;
+      padding: 0.7rem 0.8rem;
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 8px;
+      font-size: 1rem;
+      background: rgba(2, 6, 23, 0.6);
+      color: #f8fafc;
+      transition: border 0.2s ease, box-shadow 0.2s ease;
+    }
+    input:focus,
+    select:focus {
+      outline: none;
+      border-color: rgba(59, 130, 246, 0.9);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
+    }
+    button {
+      padding: 0.7rem 1.6rem;
+      border: none;
+      border-radius: 999px;
+      background: linear-gradient(120deg, #06b6d4, #2563eb 60%, #9333ea);
+      color: #f1f5f9;
+      font-size: 0.95rem;
+      cursor: pointer;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      box-shadow: 0 15px 30px rgba(37, 99, 235, 0.35);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 20px 40px rgba(37, 99, 235, 0.45);
+    }
+    button.secondary {
+      background: transparent;
+      border: 1px dashed rgba(125, 211, 252, 0.7);
+      color: #7dd3fc;
+      box-shadow: none;
+    }
+    .banner {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.25), rgba(6, 182, 212, 0.25));
+      color: #bbf7d0;
+      padding: 0.9rem 1rem;
+      border-radius: 10px;
+      margin-bottom: 1.4rem;
+      border: 1px solid rgba(74, 222, 128, 0.35);
+    }
+    .rows {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.2rem;
+      margin-bottom: 2rem;
+    }
+    .card {
+      border-radius: 12px;
+      padding: 1.1rem;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(96, 165, 250, 0.25);
+      box-shadow: 0 10px 25px rgba(2, 6, 23, 0.65);
+    }
+    .card h3 {
+      margin: 0 0 0.4rem 0;
+      font-size: 1.15rem;
+      color: #e0f2fe;
+    }
+    .card small {
+      color: #94a3b8;
+    }
+    .helper {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin-top: 0.2rem;
+    }
+    .split {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 2rem;
+    }
+    .endpoint-row {
+      border: 1px dashed rgba(125, 211, 252, 0.4);
+      border-radius: 10px;
+      padding: 0.9rem;
+      margin-bottom: 0.8rem;
+      background: rgba(8, 47, 73, 0.35);
+    }
+    .endpoint-row label {
+      margin-bottom: 0.5rem;
+    }
+    .endpoint-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+    .endpoint-actions button {
+      padding: 0.45rem 0.9rem;
+      font-size: 0.75rem;
+      border-radius: 999px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Health Checks Configuration</h1>
+    <p>Catalog HTTP domains with as many endpoints as you need and keep SFTP checks alongside them. Everything is saved into <code>configs/health_checks.json</code>.</p>
+
+    {{if .Saved}}
+    <div class="banner">
+      {{if eq .Saved "http"}}
+        HTTP domain and its endpoints saved.
+      {{else if eq .Saved "sftp"}}
+        SFTP check saved.
+      {{else}}
+        Configuration saved.
+      {{end}}
+    </div>
+    {{end}}
+
+    <section>
+      <h2>Saved HTTP domains</h2>
+      {{if .HTTPDomains}}
+      <div class="rows">
+        {{range .HTTPDomains}}
+        <div class="card">
+          <h3>{{if .Name}}{{.Name}}{{else}}{{.Host}}{{end}}</h3>
+          <div><strong>Host:</strong> {{.Host}}</div>
+          <div><strong>Endpoints:</strong></div>
+          <ul>
+            {{range .Endpoints}}
+            <li><code>{{.Method}}</code> {{.Path}}</li>
+            {{end}}
+          </ul>
+        </div>
+        {{end}}
+      </div>
+      {{else}}
+      <p class="helper">No HTTP domains have been configured yet.</p>
+      {{end}}
+    </section>
+
+    <section>
+      <h2>Saved SFTP checks</h2>
+      {{if .SFTPList}}
+      <div class="rows">
+        {{range .SFTPList}}
+        <div class="card">
+          <h3>{{if .Name}}{{.Name}}{{else}}{{.Host}}{{end}}</h3>
+          <div><strong>Host:</strong> {{.Host}}:{{.Port}}</div>
+          <div><strong>Mode:</strong> {{.Mode}}</div>
+          {{if .Path}}
+          <div><strong>Path:</strong> {{.Path}}</div>
+          {{end}}
+          <small>User: {{.Username}}</small>
+        </div>
+        {{end}}
+      </div>
+      {{else}}
+      <p class="helper">No SFTP checks stored yet.</p>
+      {{end}}
+    </section>
+
+    <div class="split">
+      <form method="POST" action="/config/http" id="http-form">
+        <fieldset>
+          <legend>Add HTTP domain</legend>
+          <label>
+            Friendly name
+            <input type="text" name="http_name" value="{{.HTTPForm.Name}}" placeholder="Catalog API" />
+          </label>
+          <label>
+            Base URL / host
+            <input type="url" name="http_host" value="{{.HTTPForm.Host}}" placeholder="https://api.example.com" required />
+          </label>
+          <div>
+            <strong>Endpoints</strong>
+            <p class="helper">Provide one or more endpoint/method pairs for this domain.</p>
+          </div>
+          <div id="endpoint-rows">
+            {{if .HTTPForm.Endpoints}}
+              {{range $idx, $ep := .HTTPForm.Endpoints}}
+              <div class="endpoint-row">
+                <label>
+                  Path
+                  <input type="text" name="http_endpoint_path" value="{{$ep.Path}}" placeholder="/health" {{if eq $idx 0}}required{{end}} />
+                </label>
+                <label>
+                  Method
+                  <select name="http_endpoint_method">
+                    <option value="GET" {{if eq $ep.Method "GET"}}selected{{end}}>GET</option>
+                    <option value="POST" {{if eq $ep.Method "POST"}}selected{{end}}>POST</option>
+                    <option value="PUT" {{if eq $ep.Method "PUT"}}selected{{end}}>PUT</option>
+                    <option value="DELETE" {{if eq $ep.Method "DELETE"}}selected{{end}}>DELETE</option>
+                    <option value="PATCH" {{if eq $ep.Method "PATCH"}}selected{{end}}>PATCH</option>
+                  </select>
+                </label>
+                <div class="endpoint-actions">
+                  <button type="button" class="remove-endpoint" {{if eq $idx 0}}style="display:none"{{end}}>Remove</button>
+                </div>
+              </div>
+              {{end}}
+            {{else}}
+              <div class="endpoint-row">
+                <label>
+                  Path
+                  <input type="text" name="http_endpoint_path" placeholder="/health" required />
+                </label>
+                <label>
+                  Method
+                  <select name="http_endpoint_method">
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="DELETE">DELETE</option>
+                    <option value="PATCH">PATCH</option>
+                  </select>
+                </label>
+                <div class="endpoint-actions">
+                  <button type="button" class="remove-endpoint" style="display:none">Remove</button>
+                </div>
+              </div>
+            {{end}}
+          </div>
+          <button type="button" class="secondary" id="add-endpoint">+ Add another endpoint</button>
+          <br /><br />
+          <button type="submit">Save HTTP domain</button>
+        </fieldset>
+      </form>
+
+      <form method="POST" action="/config/sftp">
+        <fieldset>
+          <legend>Add SFTP check</legend>
+          <label>
+            Friendly name
+            <input type="text" name="sftp_name" value="{{.SFTPForm.Name}}" placeholder="Primary SFTP" />
+          </label>
+          <label>
+            Host
+            <input type="text" name="sftp_host" value="{{.SFTPForm.Host}}" placeholder="sftp.example.com" required />
+          </label>
+          <label>
+            Port
+            <input type="number" name="sftp_port" min="1" max="65535" value="{{.SFTPForm.Port}}" />
+          </label>
+          <label>
+            Username
+            <input type="text" name="sftp_username" value="{{.SFTPForm.Username}}" required />
+          </label>
+          <label>
+            Password
+            <input type="password" name="sftp_password" value="{{.SFTPForm.Password}}" />
+          </label>
+          <label>
+            Remote path to check
+            <input type="text" name="sftp_path" value="{{.SFTPForm.Path}}" placeholder="/" />
+          </label>
+          <label>
+            Command mode
+            <select name="sftp_mode">
+              <option value="stat" {{if eq .SFTPForm.Mode "stat"}}selected{{end}}>stat</option>
+              <option value="list" {{if eq .SFTPForm.Mode "list"}}selected{{end}}>list</option>
+              <option value="read" {{if eq .SFTPForm.Mode "read"}}selected{{end}}>read</option>
+            </select>
+          </label>
+          <button type="submit">Add SFTP check</button>
+        </fieldset>
+      </form>
+    </div>
+  </div>
+
+  <template id="endpoint-template">
+    <div class="endpoint-row">
+      <label>
+        Path
+        <input type="text" name="http_endpoint_path" placeholder="/health" />
+      </label>
+      <label>
+        Method
+        <select name="http_endpoint_method">
+          <option value="GET">GET</option>
+          <option value="POST">POST</option>
+          <option value="PUT">PUT</option>
+          <option value="DELETE">DELETE</option>
+          <option value="PATCH">PATCH</option>
+        </select>
+      </label>
+      <div class="endpoint-actions">
+        <button type="button" class="remove-endpoint">Remove</button>
+      </div>
+    </div>
+  </template>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const container = document.getElementById('endpoint-rows');
+      const addButton = document.getElementById('add-endpoint');
+      const template = document.getElementById('endpoint-template');
+
+      addButton?.addEventListener('click', (event) => {
+        event.preventDefault();
+        const clone = template.content.cloneNode(true);
+        container.appendChild(clone);
+      });
+
+      container?.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (!target.classList.contains('remove-endpoint')) return;
+        event.preventDefault();
+        const rows = container.querySelectorAll('.endpoint-row');
+        if (rows.length <= 1) {
+          return;
+        }
+        const row = target.closest('.endpoint-row');
+        row?.remove();
+      });
+    });
+  </script>
+</body>
+</html>

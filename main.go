@@ -1,135 +1,98 @@
 package main
 
 import (
-	"encoding/json"
-	"health-check-on-go/libs/health_check"
+	"log"
 	"strings"
+
+	"health-check-on-go/libs/config"
+	"health-check-on-go/libs/health_check"
 )
 
-type catFact struct {
-	Fact   string `json:"fact"`
-	Length int    `json:"length"`
-}
-
-type catFactsResponse struct {
-	Data []catFact `json:"data"`
-}
-
 func main() {
-	buildHTTPServices()
-	buildSFTPServices()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("failed to load configuration: %v", err)
+	}
+
+	buildHTTPServices(cfg.HTTP)
+	buildSFTPServices(cfg.SFTP)
 
 	Execute()
 }
 
-func buildHTTPServices() health_check.HTTPServices {
-	httpServices := health_check.HTTPServices{}
+func buildHTTPServices(domains []config.HTTPDomainConfig) health_check.HTTPServices {
+	services := health_check.HTTPServices{}
 
-	catFacts := health_check.Domain{
-		Host: "https://catfact.ninja",
-		Headers: map[string]string{
-			"Content-Type": "application/json",
-		},
+	for _, entry := range domains {
+		host := strings.TrimSpace(entry.Host)
+		if host == "" {
+			continue
+		}
+
+		domain := health_check.Domain{Host: host}
+
+		for _, endpoint := range entry.Endpoints {
+			path := strings.TrimSpace(endpoint.Path)
+			if path == "" {
+				continue
+			}
+			method := strings.TrimSpace(endpoint.Method)
+			if method == "" {
+				method = "GET"
+			}
+			domain.SetUrl(path, strings.ToUpper(method), nil, nil)
+		}
+
+		if len(domain.Urls) == 0 {
+			continue
+		}
+
+		services.SetDomain(domain)
 	}
 
-	catFacts.SetUrl(
-		"/fact",
-		"GET",
-		nil,
-		[]health_check.Assert{
-			{
-				Fn: func(response string) bool {
-					var fact catFact
-					if err := json.Unmarshal([]byte(response), &fact); err != nil {
-						return false
-					}
-					return strings.TrimSpace(fact.Fact) != ""
-				},
-				Description: "Fact endpoint returns text",
-			},
-		},
-	)
+	globalContext.healthCheckContext.AddHttp(services)
 
-	catFacts.SetUrl(
-		"/facts",
-		"GET",
-		nil,
-		[]health_check.Assert{
-			{
-				Fn: func(response string) bool {
-					var facts catFactsResponse
-					if err := json.Unmarshal([]byte(response), &facts); err != nil {
-						return false
-					}
-					return len(facts.Data) > 0
-				},
-				Description: "Facts endpoint returns at least one entry",
-			},
-			{
-				Fn: func(response string) bool {
-					var facts catFactsResponse
-					if err := json.Unmarshal([]byte(response), &facts); err != nil {
-						return false
-					}
-					for _, fact := range facts.Data {
-						if len(strings.TrimSpace(fact.Fact)) == 0 {
-							return false
-						}
-					}
-					return true
-				},
-				Description: "Facts payload includes valid text entries",
-			},
-		},
-	)
-
-	httpServices.SetDomain(catFacts)
-
-	globalContext.healthCheckContext.AddHttp(httpServices)
-
-	return httpServices
+	return services
 }
 
-func buildSFTPServices() health_check.SFTPServices {
-	server := health_check.Server{
-		Name:     "Free SFTP server",
-		Host:     "test.rebex.net",
-		Username: "demo",
-		Password: "password",
-	}
-
-	server.SetCommand(health_check.Command{
-		Name: "List directory",
-		Path: "/",
-		Mode: health_check.CommandModeList,
-		Asserts: []health_check.Assert{
-			{
-				Fn: func(output string) bool {
-					return strings.TrimSpace(output) != ""
-				},
-				Description: "Directory is not empty",
-			},
-		},
-	})
-
-	server.SetCommand(health_check.Command{
-		Name: "Validate path exists",
-		Path: "/",
-		Mode: health_check.CommandModeStat,
-		Asserts: []health_check.Assert{
-			{
-				Fn: func(output string) bool {
-					return strings.Contains(output, "dir=true") || strings.Contains(output, "dir=false")
-				},
-				Description: "Stat response returned metadata",
-			},
-		},
-	})
-
+func buildSFTPServices(servers []config.SFTPCheckConfig) health_check.SFTPServices {
 	services := health_check.SFTPServices{}
-	services.SetServer(server)
+
+	for _, entry := range servers {
+		host := strings.TrimSpace(entry.Host)
+		username := strings.TrimSpace(entry.Username)
+		if host == "" || username == "" {
+			continue
+		}
+
+		server := health_check.Server{
+			Name:     strings.TrimSpace(entry.Name),
+			Host:     host,
+			Port:     entry.Port,
+			Username: username,
+			Password: entry.Password,
+		}
+
+		server.SetCommand(health_check.Command{
+			Path: entry.Path,
+			Mode: parseCommandMode(entry.Mode),
+		})
+
+		services.SetServer(server)
+	}
 
 	globalContext.healthCheckContext.AddSftp(services)
 
 	return services
+}
+
+func parseCommandMode(value string) health_check.CommandMode {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case string(health_check.CommandModeList):
+		return health_check.CommandModeList
+	case string(health_check.CommandModeRead):
+		return health_check.CommandModeRead
+	default:
+		return health_check.CommandModeStat
+	}
 }

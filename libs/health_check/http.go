@@ -1,16 +1,19 @@
 package health_check
 
 import (
+	"encoding/json"
 	"fmt"
-	"health-check-on-go/libs/utility"
 	"io"
 	"net/http"
 	url2 "net/url"
-	"strings"
-	"sync"
+	"os"
+	path2 "path"
+	"time"
 
-	"github.com/fatih/color"
+	"github.com/robfig/cron/v3"
 )
+
+const DefaultResultsPath = "results/"
 
 type HTTPServices struct {
 	Domains []Domain
@@ -22,23 +25,21 @@ type Domain struct {
 	Urls    []url
 }
 
-type Assert struct {
-	Fn          func(body string) bool
-	Description string
-}
-
 type url struct {
-	Path    string
-	Method  string
-	Headers map[string]string
-	Asserts []Assert
+	Path           string
+	Method         string
+	Headers        map[string]string
+	ExpectedStatus int
+	Schedule       string
 }
 
 type Result struct {
-	Path       string
-	StatusCode int
-	Body       string
-	Asserts    []map[string]bool
+	Success    bool   `json:"success"`
+	Path       string `json:"path"`
+	Domain     string `json:"domain"`
+	StatusCode int    `json:"status_code"`
+	Body       string `json:"body"`
+	CreatedAt  int64  `json:"created_at"`
 }
 
 type ServicesTestResult struct {
@@ -50,18 +51,59 @@ func (httpServices *HTTPServices) SetDomain(d Domain) {
 	httpServices.Domains = append(httpServices.Domains, d)
 }
 
-func (d *Domain) SetUrl(path string, method string, headers map[string]string, asserts []Assert) {
-	d.Urls = append(d.Urls, url{Path: path, Method: method, Headers: headers, Asserts: asserts})
+func (d *Domain) SetUrl(path string, method string, headers map[string]string, schedule string, expectedStatus int) {
+	d.Urls = append(d.Urls, url{
+		Path:           path,
+		Method:         method,
+		Headers:        headers,
+		Schedule:       schedule,
+		ExpectedStatus: expectedStatus,
+	})
 }
 
-func runRequest(d Domain, u url, client http.Client, ch chan<- Result, wg *sync.WaitGroup) {
-	defer wg.Done()
+func saveRunInfo(result *Result, resultPath string) {
+	payload, err := json.MarshalIndent(&result, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	err = os.WriteFile(resultPath, payload, 0o644)
+}
 
-	result := Result{
-		Path: u.Path,
+func saveRecordInIndex(result *Result, previousResults *[]Result, indexPath string) {
+	*previousResults = append(*previousResults, *result)
+
+	previousResultsText, err := json.MarshalIndent(previousResults, "", "  ")
+
+	if err != nil {
+		panic(err)
 	}
 
+	os.WriteFile(indexPath, previousResultsText, 0o644)
+}
+
+func runRequestSync(previousResults *[]Result, d Domain, u url, client http.Client) {
+	fmt.Println(previousResults)
+	dir := path2.Join(DefaultResultsPath, u.Path)
+
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+
+	resultPath := path2.Join(dir, time.Now().Format(time.RFC3339))
+
+	indexPath := path2.Join(dir, "index")
+
 	fullURL, _ := url2.JoinPath(d.Host, u.Path)
+
+	result := &Result{
+		Path:      u.Path,
+		Success:   false,
+		Domain:    d.Host,
+		CreatedAt: time.Now().Unix(),
+	}
+
+	defer saveRunInfo(result, resultPath)
+	defer saveRecordInIndex(result, previousResults, indexPath)
 
 	req, err := http.NewRequest(u.Method, fullURL, nil)
 
@@ -74,158 +116,66 @@ func runRequest(d Domain, u url, client http.Client, ch chan<- Result, wg *sync.
 	}
 
 	if err != nil {
-		ch <- Result{StatusCode: 600, Body: err.Error()}
+		result.Body = err.Error()
+		result.StatusCode = 604
+
 		return
 	}
 
 	res, err := client.Do(req)
 	if err != nil {
-		ch <- Result{StatusCode: 602, Body: err.Error()}
+		result.Body = err.Error()
+		result.StatusCode = 602
 		return
 	}
 
-	// Don't forget to close the body
 	body, err := io.ReadAll(res.Body)
-	res.Body.Close()
+	defer res.Body.Close()
 	if err != nil {
-		ch <- Result{StatusCode: res.StatusCode, Body: err.Error()}
+		result.Body = err.Error()
+		result.StatusCode = res.StatusCode
+		return
 	} else {
 		result.StatusCode = res.StatusCode
 		result.Body = string(body)
-
-	}
-
-	for _, assert := range u.Asserts {
-		success := assert.Fn(string(body))
-
-		result.Asserts = append(result.Asserts, map[string]bool{
-			assert.Description: success,
-		})
-	}
-
-	ch <- result
-}
-
-func getChanLen(d Domain) int {
-	var sum int
-	for _, u := range d.Urls {
-		sum += len(u.Asserts)
-	}
-
-	return sum
-}
-
-func (d *Domain) testUrls(globalResults chan<- ServicesTestResult, wg *sync.WaitGroup) {
-	defer wg.Done()
-	client := &http.Client{}
-
-	var requestsWG sync.WaitGroup
-
-	chanLen := getChanLen(*d)
-
-	urlResults := make(chan Result, chanLen)
-
-	for _, u := range d.Urls {
-		requestsWG.Add(1)
-		go runRequest(*d, u, *client, urlResults, &requestsWG)
-	}
-
-	go func() {
-		requestsWG.Wait()
-		close(urlResults)
-	}()
-
-	var domainResults []Result
-
-	for result := range urlResults {
-		domainResults = append(domainResults, result)
-	}
-
-	globalResults <- ServicesTestResult{
-		domain:  d.Host,
-		results: domainResults,
+		result.Success = res.StatusCode == u.ExpectedStatus
 	}
 }
 
-const (
-	urlLabelWidth = 40
-)
+func loadPreviousRuns(u url) *[]Result {
+	filePath := path2.Join(DefaultResultsPath, u.Path, "index")
+	file, err := os.ReadFile(filePath)
 
-func httpStatusBadge(code int) string {
-	switch {
-	case code >= 200 && code < 300:
-		return color.GreenString("%d", code)
-	case code >= 300 && code < 400:
-		return color.YellowString("%d", code)
-	case code == 0:
-		return color.YellowString("pending")
-	default:
-		return color.RedString("%d", code)
-	}
-}
+	var previousRuns []Result
 
-func printDomainHeader(domain string, success bool) {
-	fmt.Println(utility.DividerLine())
-	fmt.Printf("%s %s\n", utility.StatusBadge(success), color.CyanString(domain))
-}
+	err = json.Unmarshal(file, &previousRuns)
 
-func printURLSummary(path string, statusCode int, success bool) {
-	fmt.Printf("%s%s %-*s %s\n", utility.Indent, utility.StatusBadge(success), urlLabelWidth, path, httpStatusBadge(statusCode))
-}
-
-func (httpServices *HTTPServices) RunTesting() {
-	var wg sync.WaitGroup
-	domainsChan := make(chan ServicesTestResult, len(httpServices.Domains))
-
-	for _, d := range httpServices.Domains {
-		wg.Add(1)
-		go d.testUrls(domainsChan, &wg)
+	if err != nil {
+		return &previousRuns
 	}
 
-	go func() {
-		wg.Wait()
-		close(domainsChan)
-	}()
+	return &previousRuns
+}
 
-	for domainResult := range domainsChan {
-		success := true
-		for _, result := range domainResult.results {
-			for _, assert := range result.Asserts {
-				for _, value := range assert {
-					if !value {
-						success = false
-					}
-				}
+func (httpServices *HTTPServices) RunHttpCrons() {
+	c := cron.New()
+
+	client := http.Client{}
+
+	for _, domain := range httpServices.Domains {
+		for _, url := range domain.Urls {
+			previousRuns := loadPreviousRuns(url)
+
+			_, err := c.AddFunc(url.Schedule, func() {
+				runRequestSync(previousRuns, domain, url, client)
+			})
+			if err != nil {
+				fmt.Println(err)
 			}
 		}
-
-		printDomainHeader(domainResult.domain, success)
-
-		for _, url := range domainResult.results {
-			domainSuccess := true
-			for _, assert := range url.Asserts {
-				for _, value := range assert {
-					if !value {
-						domainSuccess = false
-					}
-				}
-			}
-
-			printURLSummary(url.Path, url.StatusCode, domainSuccess)
-
-			if !domainSuccess && strings.TrimSpace(url.Body) != "" {
-				fmt.Printf("%s%sBody: %s\n", utility.Indent, utility.Indent, color.YellowString(utility.FormatSnippet(url.Body, "no response body", utility.DefaultSnippetLimit)))
-			}
-
-			for _, value := range url.Asserts {
-				for description, r := range value {
-					fmt.Printf("%s%s %s\n", utility.DoubleIndent, utility.StatusBadge(r), description)
-				}
-			}
-
-			fmt.Println()
-		}
-
-		fmt.Println()
 	}
+
+	c.Start()
+
+	select {}
 }

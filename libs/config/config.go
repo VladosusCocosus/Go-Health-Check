@@ -23,8 +23,10 @@ type HTTPDomainConfig struct {
 }
 
 type HTTPEndpoint struct {
-	Path   string `json:"path"`
-	Method string `json:"method"`
+	Path           string `json:"path"`
+	Method         string `json:"method"`
+	ExpectedStatus int    `json:"expectedStatus"`
+	Schedule       string `json:"schedule"`
 }
 
 type SFTPCheckConfig struct {
@@ -55,12 +57,6 @@ func LoadFrom(path string) (HealthCheckConfig, error) {
 		return HealthCheckConfig{}, err
 	}
 
-	if shouldMigrateHTTP(cfg.HTTP) {
-		if upgraded, err := migrateLegacyHTTP(data); err == nil && len(upgraded) > 0 {
-			cfg.HTTP = upgraded
-		}
-	}
-
 	return cfg, nil
 }
 
@@ -79,68 +75,6 @@ func SaveTo(path string, cfg HealthCheckConfig) error {
 	}
 
 	return os.WriteFile(path, payload, 0o644)
-}
-
-type legacyHTTPEntry struct {
-	Name   string `json:"name"`
-	Host   string `json:"host"`
-	Path   string `json:"path"`
-	Method string `json:"method"`
-}
-
-type legacyConfig struct {
-	HTTP []legacyHTTPEntry `json:"http"`
-}
-
-func shouldMigrateHTTP(domains []HTTPDomainConfig) bool {
-	if len(domains) == 0 {
-		return false
-	}
-	for _, d := range domains {
-		if len(d.Endpoints) > 0 {
-			return false
-		}
-	}
-	return true
-}
-
-func migrateLegacyHTTP(data []byte) ([]HTTPDomainConfig, error) {
-	var legacy legacyConfig
-	if err := json.Unmarshal(data, &legacy); err != nil {
-		return nil, err
-	}
-	if len(legacy.HTTP) == 0 {
-		return nil, nil
-	}
-
-	result := make([]HTTPDomainConfig, 0)
-	index := make(map[string]int)
-
-	for _, entry := range legacy.HTTP {
-		host := strings.TrimSpace(entry.Host)
-		path := strings.TrimSpace(entry.Path)
-		if host == "" || path == "" {
-			continue
-		}
-		name := strings.TrimSpace(entry.Name)
-		key := fmt.Sprintf("%s|%s", host, name)
-		pos, ok := index[key]
-		if !ok {
-			result = append(result, HTTPDomainConfig{Name: name, Host: host})
-			pos = len(result) - 1
-			index[key] = pos
-		}
-		method := strings.TrimSpace(entry.Method)
-		if method == "" {
-			method = "GET"
-		}
-		result[pos].Endpoints = append(result[pos].Endpoints, HTTPEndpoint{
-			Path:   path,
-			Method: strings.ToUpper(method),
-		})
-	}
-
-	return result, nil
 }
 
 func (cfg HTTPDomainConfig) Validate() error {

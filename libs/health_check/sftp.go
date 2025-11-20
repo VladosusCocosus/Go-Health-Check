@@ -50,7 +50,6 @@ type Command struct {
 	Mode     CommandMode
 	MaxBytes int
 	Action   CommandFunc
-	Asserts  []Assert
 }
 
 type SFTPAssert struct {
@@ -208,10 +207,6 @@ func (cmd Command) execute(client *sftp.Client) SFTPResult {
 		return result
 	}
 	result.Output = output
-	for _, assert := range cmd.Asserts {
-		success := assert.Fn(output)
-		result.Asserts = append(result.Asserts, map[string]bool{assert.Description: success})
-	}
 	return result
 }
 

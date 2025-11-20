@@ -24,11 +24,11 @@ func (context *HealthContext) RunAll() {
 	fmt.Printf("%v", context.http)
 	fmt.Printf("%v", context.sftp)
 
-	wg.Add(1)
-	go run(&wg, context.sftp.RunTesting)
+	//wg.Add(1)
+	//go run(&wg, context.sftp.RunTesting)
 
 	wg.Add(1)
-	go run(&wg, context.http.RunTesting)
+	go run(&wg, context.http.RunHttpCrons)
 
 	wg.Wait()
 }

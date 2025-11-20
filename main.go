@@ -37,10 +37,15 @@ func buildHTTPServices(domains []config.HTTPDomainConfig) health_check.HTTPServi
 				continue
 			}
 			method := strings.TrimSpace(endpoint.Method)
+
+			schedule := strings.TrimSpace(endpoint.Schedule)
+
+			expectedStatus := endpoint.ExpectedStatus
+
 			if method == "" {
 				method = "GET"
 			}
-			domain.SetUrl(path, strings.ToUpper(method), nil, nil)
+			domain.SetUrl(path, strings.ToUpper(method), nil, schedule, expectedStatus)
 		}
 
 		if len(domain.Urls) == 0 {
